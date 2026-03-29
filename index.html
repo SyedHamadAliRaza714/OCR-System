@@ -1,0 +1,264 @@
+with open("templates/index.html", "w", encoding="utf-8") as f:
+    f.write("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Urdu OCR System</title>
+<style>
+body { margin:0; font-family:"Segoe UI",Arial,sans-serif; background:#111; color:#fff; }
+h1 { text-align:center; margin:20px 0; color:#ff0000; font-size:50px;}
+.container { display:flex; flex-direction:column; align-items:center; width:100%; }
+.card { background:#1c1c1c; border-radius:12px; padding:20px; margin:15px; width:95%; max-width:1200px; box-shadow:0 4px 20px rgba(255,59,63,0.4); display:flex; flex-direction:column; }
+#drop-area { border:2px dashed #ff3b3f; border-radius:10px; padding:40px; text-align:center; color:#ff3b3f; font-size:18px; cursor:pointer; transition:background 0.2s; }
+#drop-area.hover { background:#330000; }
+#fileElem { display:none; }
+button { background-color:#ff3b3f; color:#fff; border:none; padding:12px 24px; border-radius:8px; cursor:pointer; font-size:16px; margin-top:10px; transition: background 0.2s; }
+button:hover { background-color:#ff1b1f; }
+textarea,input[type="file"] { margin-top:10px; padding:10px; border-radius:8px; border:1px solid #ff3b3f; width:95%; font-size:14px; background:#222; color:#fff; }
+.loader { border:4px solid #333; border-top:4px solid #ff1b1f; border-radius:50%; width:40px; height:40px; animation:spin 1s linear infinite; display:none; margin:10px auto; }
+@keyframes spin {0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+#results { margin-top:20px; width:100%; opacity: 0;transform: translateY(20px); transition: opacity 0.6s ease, transform 3.0s ease;}
+#results.show { opacity: 1; transform: translateY(0);}
+.result-card { background:#222222; border-left:5px solid #ff1b1f; padding:15px; margin:10px 0; border-radius:8px; display:flex; flex-direction:column; opacity: 0; transform: translateY(15px); transition: all 3.0s ease; }
+.result-card pre { white-space: pre-wrap; word-wrap: break-word; margin:0; }
+.result-card.show { opacity: 1; transform: translateY(0);}
+.progress-container { background:#fff; border-radius:8px; overflow:hidden; margin-top:10px; height:20px; position:relative; }
+.progress-bar { height:100%; background:#ff1b1f; width:0%; transition:width 0.5s; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+.copy-btn { align-self:flex-end; margin-top:8px; padding:5px 12px; font-size:14px; background:#ff3b3f; border-radius:5px; cursor:pointer; border:none; }
+.copy-btn:hover { background:#ff1a1c; }
+#uploaded-file { margin-top:10px; font-style:bold; color:#fff; text-align:center; }
+pre {
+    direction: rtl;
+    text-align: right;
+    font-family: "Noto Nastaliq Urdu", serif;
+}
+  
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(8px); }
+}
+
+@keyframes glowPulse {
+    0% { text-shadow: 0 0 5px #ff3b3f; }
+    50% { text-shadow: 0 0 25px #ff0000; }
+    100% { text-shadow: 0 0 5px #ff3b3f; }
+}
+
+.scroll-arrow {
+    text-align:center;
+    font-size:80px;
+    font-weight: bold;
+    color:#ff3b3f;
+    animation: bounce 1s infinite, glowPulse 1.5s infinite;
+}
+
+</style>
+</head>
+<body>
+<h1>Lafz-Aashna (Urdu OCR)</h1>
+<div class="container">
+    <div class="card">
+        <div id="drop-area">
+            <p>Drag & Drop (PDF or Image)</p>
+            <p><label for="fileElem" style="color:#ff0B0f; cursor:pointer;">Browse</label></p>
+            <input type="file" id="fileElem" accept=".pdf,image/*">
+        </div>
+
+        <div id="uploaded-file"></div>
+
+        <label><br>Ground Truth Text (Optional):</label>
+        <textarea id="groundTruth" rows="3" placeholder="Paste text here"></textarea>
+
+        <label><br>Ground Truth File (Optional):</label>
+        <input type="file" id="gtFile" accept=".txt"><br>
+
+        <button id="extractBtn">Extract Urdu Text</button>
+        <div class="loader" id="loader"></div>
+    </div>
+    <div id="scroll-container"></div>
+    <div id="results"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+let dropArea = document.getElementById("drop-area");
+let fileInput = document.getElementById("fileElem");
+let uploadedFileDiv = document.getElementById("uploaded-file");
+
+dropArea.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropArea.classList.add("hover");
+});
+
+dropArea.addEventListener("dragleave", () =>
+    dropArea.classList.remove("hover")
+);
+
+dropArea.addEventListener("drop", e => {
+    e.preventDefault();
+    dropArea.classList.remove("hover");
+    if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        uploadedFileDiv.textContent = "Selected file: " + fileInput.files[0].name;
+    }
+});
+
+fileInput.addEventListener("change", () => {
+    uploadedFileDiv.textContent = "Selected file: " + fileInput.files[0].name;
+});
+
+document.getElementById("extractBtn").addEventListener("click", () => {
+    let file = fileInput.files[0];
+    let gtText = document.getElementById("groundTruth").value;
+    let gtFile = document.getElementById("gtFile").files[0];
+
+    if (!file) {
+
+        let btn = document.getElementById("extractBtn");
+
+        let toast = document.createElement("div");
+        toast.textContent = "Please select a file!";
+        toast.style.position = "absolute";
+        toast.style.background = "#ff3b3f";
+        toast.style.color = "#fff";
+        toast.style.padding = "6px 12px";
+        toast.style.borderRadius = "6px";
+        toast.style.fontSize = "13px";
+        toast.style.fontWeight = "bold";
+        toast.style.zIndex = "9999";
+    
+        let rect = btn.getBoundingClientRect();
+        toast.style.top = (rect.top + window.scrollY - 40) + "px";
+        toast.style.left = (rect.left + window.scrollX + (rect.width / 2)) + "px";
+        toast.style.transform = "translateX(-50%)";
+        document.body.appendChild(toast);
+
+        setTimeout(() => toast.remove(), 1500);
+
+        return;
+    }
+
+    let loader = document.getElementById("loader");
+    loader.style.display = "block";
+    document.getElementById("results").innerHTML = "";
+
+    let formData = new FormData();
+    formData.append("file", file);
+    if (gtText) formData.append("ground_truth", gtText);
+    if (gtFile) formData.append("ground_truth_file", gtFile);
+
+    fetch("/", { method: "POST", body: formData })
+        .then(response => response.json())
+        .then(data => {
+            loader.style.display = "none";
+            let resultsDiv = document.getElementById("results");
+            resultsDiv.innerHTML = "";
+            resultsDiv.classList.remove("show");
+            
+            let container = document.getElementById("scroll-container");
+            container.innerHTML = "";
+            
+            let arrow = document.createElement("div");
+            arrow.className = "scroll-arrow";
+            arrow.innerHTML = "&#8595;"; // ↓
+
+            container.appendChild(arrow);
+          
+            window.addEventListener("scroll", function removeMsg() {
+
+                arrow.remove();
+                window.removeEventListener("scroll", removeMsg);
+            });
+      
+            void resultsDiv.offsetWidth;
+           
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("show");
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                threshold: 0.2
+            });
+           
+            data.results.forEach((r) => {
+                let confPercent = r.confidence.toFixed(2);
+
+                let card = document.createElement("div");
+                card.className = "result-card";
+
+                card.innerHTML = `
+                    <p style="font-size:30px;"><strong>Page ${r.page}</strong>
+                    <div class="progress-container">
+                        <div class="progress-bar" style="width: ${confPercent}%;">
+                            ${confPercent}%
+                        </div>
+                    </div><br>
+                    <pre style="font-size:20px;">${r.text}</pre>
+                    <button class="copy-btn">Copy</button>
+                `;
+
+                resultsDiv.appendChild(card);
+
+                observer.observe(card);
+            });
+    
+            if (data.wer !== null && data.cer !== null) {
+                let evalCard = document.createElement("div");
+                evalCard.className = "result-card";
+
+                evalCard.innerHTML = `
+                    <p>
+                    <span style="font-size:30px;"><strong>Evaluation:</strong></span><br><br>
+                    <span style="font-size:20px;">
+                        WER: ${data.wer}%<br>
+                        CER: ${data.cer}%
+                    </span>
+                    </p>
+                `;
+
+                resultsDiv.appendChild(evalCard);
+                
+                observer.observe(evalCard);
+            }
+
+            setTimeout(() => {
+                resultsDiv.classList.add("show");
+            }, 100);
+       
+            document.querySelectorAll(".copy-btn").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    let target = btn.previousElementSibling;
+                    navigator.clipboard.writeText(target.innerText);
+
+                    let toast = document.createElement("div");
+                    toast.textContent = "Copied!";
+                    toast.style.position = "absolute";
+                    toast.style.background = "#000000";
+                    toast.style.color = "#fff";
+                    toast.style.padding = "5px 10px";
+                    toast.style.borderRadius = "5px";
+                    toast.style.fontSize = "12px";
+                    toast.style.zIndex = "9999";
+
+                    let rect = btn.getBoundingClientRect();
+                    toast.style.top = (rect.top + window.scrollY - 40) + "px";
+                    toast.style.left = (rect.left + window.scrollX - 3) + "px";
+
+                    document.body.appendChild(toast);
+
+                    setTimeout(() => toast.remove(), 1500);
+                });
+            });
+        })
+        .catch(err => {
+            loader.style.display = "none";
+            alert("Error: " + err);
+        });
+});
+</script>
+</body>
+</html>""")
