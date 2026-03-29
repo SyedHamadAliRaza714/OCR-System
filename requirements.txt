@@ -1,0 +1,11 @@
+Tech-stack required to install:
+flask 
+pyngrok 
+pytesseract 
+opencv-python 
+pillow 
+pdf2image 
+jiwer
+tesseract-ocr 
+tesseract-ocr-urd 
+poppler-utils 
